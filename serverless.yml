@@ -1,0 +1,44 @@
+service: ocr-backend
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.9
+  region: ap-northeast-2
+  stage: ${opt:stage, 'dev'}
+  environment:
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: 
+            - 'arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/*:*:*'
+
+functions:
+  api:
+    handler: main.handler
+    events:
+      - http:
+          path: /api/{proxy+}
+          method: any
+          cors: true
+
+package:
+  patterns:
+    - '!venv/**'
+    - '!__pycache__/**'
+    - '!*.pyc'
+    - '!.git/**'
+    - '!.gitignore'
+    - '!.env'
+    - '!.vscode/**'
+    - '!.pytest_cache/**'
+    - '!*.md'
+    - '!requirements.txt'
+    - '!serverless.yml' 
