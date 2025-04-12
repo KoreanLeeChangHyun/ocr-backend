@@ -11,7 +11,7 @@ from io import BytesIO
 import base64
 import pytesseract
 from PIL import Image
-#
+
 
 # 환경 변수 로드
 load_dotenv()
