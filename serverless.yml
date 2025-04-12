@@ -9,6 +9,9 @@ provider:
   stage: ${opt:stage, 'dev'}
   environment:
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+    ALLOWED_ORIGINS: "*"
+  timeout: 30
+  memorySize: 1024
   iam:
     role:
       statements:
@@ -28,6 +31,8 @@ functions:
           path: /api/{proxy+}
           method: any
           cors: true
+    layers:
+      - arn:aws:lambda:ap-northeast-2:770693421928:layer:Klayers-p39-tesseract:1
 
 package:
   patterns:
@@ -41,4 +46,5 @@ package:
     - '!.pytest_cache/**'
     - '!*.md'
     - '!requirements.txt'
-    - '!serverless.yml' 
+    - '!serverless.yml'
+    - '!Dockerfile' 
