@@ -10,7 +10,7 @@ from typing import List  # 타입 힌팅을 위한 List 타입
 from mangum import Mangum  # AWS Lambda에서 FastAPI 실행을 위한 어댑터
 import pytesseract  # OCR (광학 문자 인식) 라이브러리
 
-# .env 파일에서 환경 변수 로드
+# .env 파일에서 환경 변수 로드 2
 load_dotenv()
 
 # FastAPI 애플리케이션 인스턴스 생성
