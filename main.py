@@ -67,10 +67,37 @@ async def process_images(files: List[UploadFile] = File(...)):
     results = []
     
     for file in files:
-        image_content = await file.read()
-        image = Image.open(io.BytesIO(image_content))
-        
         try:
+            # 파일 크기 제한 (10MB)
+            if file.size > 10 * 1024 * 1024:
+                results.append({
+                    "filename": file.filename,
+                    "error": "파일 크기가 10MB를 초과합니다."
+                })
+                continue
+
+            image_content = await file.read()
+            
+            # 파일이 비어있는지 확인
+            if not image_content:
+                results.append({
+                    "filename": file.filename,
+                    "error": "빈 파일입니다."
+                })
+                continue
+
+            # 이미지 파일 유효성 검사
+            try:
+                image = Image.open(io.BytesIO(image_content))
+                image.verify()  # 이미지 유효성 검증
+                image = Image.open(io.BytesIO(image_content))  # verify() 후에는 다시 열어야 함
+            except Exception as e:
+                results.append({
+                    "filename": file.filename,
+                    "error": f"유효하지 않은 이미지 파일입니다: {str(e)}"
+                })
+                continue
+            
             # Tesseract OCR로 텍스트 추출
             extracted_text = pytesseract.image_to_string(image, lang='kor+eng')
             
