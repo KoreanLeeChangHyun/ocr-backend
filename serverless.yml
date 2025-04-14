@@ -10,12 +10,6 @@ provider:
     S3_BUCKET: "ocr-temp-storage"
   timeout: 60
   memorySize: 3008
-  vpc:
-    securityGroupIds:
-      - ${env:VPC_SECURITY_GROUP}
-    subnetIds:
-      - ${env:VPC_SUBNET_1}
-      - ${env:VPC_SUBNET_2}
   iam:
     role:
       statements:
@@ -35,12 +29,6 @@ provider:
           Resource: 
             - "arn:aws:s3:::${self:provider.environment.S3_BUCKET}"
             - "arn:aws:s3:::${self:provider.environment.S3_BUCKET}/*"
-        - Effect: Allow
-          Action:
-            - ec2:CreateNetworkInterface
-            - ec2:DescribeNetworkInterfaces
-            - ec2:DeleteNetworkInterface
-          Resource: "*"
 
 functions:
   api:
