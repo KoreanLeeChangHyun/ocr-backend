@@ -96,7 +96,7 @@ async def generate_pdf(data: dict):
     p = canvas.Canvas(buffer, pagesize=letter)
     
     # 한글 폰트 등록
-    pdfmetrics.registerFont(TTFont('NanumGothic', '/opt/python/NanumGothic.ttf'))
+    pdfmetrics.registerFont(TTFont('NanumGothic', './fonts/NanumGothic.ttf'))
     p.setFont('NanumGothic', 12)
     
     for result in data["results"]:
