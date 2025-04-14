@@ -22,11 +22,6 @@ provider:
             - logs:PutLogEvents
           Resource: 
             - 'arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/*:*:*'
-        - Effect: Allow
-          Action:
-            - lambda:GetLayerVersion
-          Resource:
-            - 'arn:aws:lambda:ap-northeast-2:770693421928:layer:Klayers-p39-tesseract:1'
 
 functions:
   api:
@@ -36,8 +31,6 @@ functions:
           path: /api/{proxy+}
           method: any
           cors: true
-    layers:
-      - arn:aws:lambda:ap-northeast-2:770693421928:layer:Klayers-p39-tesseract:1
 
 package:
   patterns:
@@ -51,5 +44,4 @@ package:
     - '!.pytest_cache/**'
     - '!*.md'
     - '!requirements.txt'
-    - '!serverless.yml'
-    - '!Dockerfile' 
+    - '!serverless.yml' 
