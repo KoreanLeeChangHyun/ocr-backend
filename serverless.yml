@@ -7,6 +7,7 @@ provider:
   stage: prod
   environment:
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+    S3_BUCKET: ${self:service}-${self:provider.stage}-temp
   timeout: 30
   memorySize: 1024
   iam:
@@ -19,6 +20,13 @@ provider:
             - logs:PutLogEvents
           Resource: 
             - "arn:aws:logs:*:*:*"
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource: 
+            - "arn:aws:s3:::${self:provider.environment.S3_BUCKET}/*"
 
 functions:
   api:
@@ -38,6 +46,24 @@ functions:
               - X-Amz-User-Agent
             allowCredentials: true
             maxAge: 86400
+
+resources:
+  Resources:
+    TempBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.S3_BUCKET}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders: ['*']
+              AllowedMethods: [GET, PUT]
+              AllowedOrigins: ['*']
+              MaxAge: 3000
+        LifecycleConfiguration:
+          Rules:
+            - Id: DeleteOldFiles
+              Status: Enabled
+              ExpirationInDays: 1
 
 package:
   patterns:

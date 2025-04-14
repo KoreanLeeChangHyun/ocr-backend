@@ -7,15 +7,25 @@ FastAPI와 AWS Lambda를 사용한 OCR 백엔드 서버입니다. 이미지에�
 - 이미지 OCR 처리
 - 텍스트 요약 생성
 - PDF 파일 생성
+- S3를 이용한 임시 파일 저장
 - RESTful API 제공
 
 ## 기술 스택
 - Python 3.9
 - FastAPI
 - AWS Lambda
+- AWS S3
 - Tesseract OCR
 - OpenAI API
 - Serverless Framework
+
+## AWS 리소스
+- Lambda 함수
+- API Gateway
+- S3 버킷 (임시 파일 저장용)
+  - 24시간 후 자동 삭제
+  - CORS 설정
+  - 프리사인드 URL 사용
 
 ## CI/CD 파이프라인
 
@@ -48,6 +58,7 @@ FastAPI와 AWS Lambda를 사용한 OCR 백엔드 서버입니다. 이미지에�
    - 서버리스 프레임워크 v3를 사용하여 배포
    - AWS Lambda 함수 생성/업데이트
    - API Gateway 엔드포인트 구성
+   - S3 버킷 생성 및 설정
    - 환경 변수 설정
 
 ## 로컬 개발 환경 설정
@@ -89,10 +100,15 @@ FastAPI와 AWS Lambda를 사용한 OCR 백엔드 서버입니다. 이미지에�
 3. 배포 상태 확인:
    - GitHub Actions 탭에서 워크플로우 실행 상태 확인
    - AWS CloudWatch에서 로그 확인
+   - AWS S3에서 버킷 생성 확인
 
 ## API 엔드포인트
 
 - `POST /api/ocr`: 이미지 OCR 처리
+  - 이미지 파일을 S3에 업로드
+  - OCR 처리 후 텍스트 추출
+  - OpenAI로 요약 생성
+  - S3 URL 반환
 - `POST /api/generate-pdf`: PDF 생성
 - `GET /api/health`: 서버 상태 확인
 
@@ -100,4 +116,5 @@ FastAPI와 AWS Lambda를 사용한 OCR 백엔드 서버입니다. 이미지에�
 
 - AWS CloudWatch 로그
 - API Gateway 메트릭스
-- Lambda 함수 메트릭스 
+- Lambda 함수 메트릭스
+- S3 버킷 메트릭스 
