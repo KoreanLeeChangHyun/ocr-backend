@@ -6,10 +6,10 @@ provider:
   name: aws
   runtime: python3.9
   region: ap-northeast-2
-  stage: ${opt:stage, 'dev'}
+  stage: prod
   environment:
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
-    ALLOWED_ORIGINS: "*"
+    ALLOWED_ORIGINS: "https://main.d32popiutux8lz.amplifyapp.com,http://localhost:3000"
   timeout: 30
   memorySize: 1024
   iam:
@@ -21,7 +21,7 @@ provider:
             - logs:CreateLogStream
             - logs:PutLogEvents
           Resource: 
-            - 'arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/*:*:*'
+            - "arn:aws:logs:*:*:*"
 
 functions:
   api:
@@ -30,7 +30,16 @@ functions:
       - http:
           path: /api/{proxy+}
           method: any
-          cors: true
+          cors:
+            origin: "https://main.d32popiutux8lz.amplifyapp.com"
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Amz-Date
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: true
 
 package:
   patterns:
@@ -44,4 +53,14 @@ package:
     - '!.pytest_cache/**'
     - '!*.md'
     - '!requirements.txt'
-    - '!serverless.yml' 
+    - '!serverless.yml'
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: true
+    slim: true
+    useDownloadCache: true
+    useStaticCache: true 
