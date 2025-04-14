@@ -68,15 +68,17 @@ async def process_images(files: List[UploadFile] = File(...)):
     
     for file in files:
         try:
-            # 파일 크기 제한 (10MB)
-            if file.size > 10 * 1024 * 1024:
+            print(f"Processing file: {file.filename}")  # 디버깅용 로그
+            
+            image_content = await file.read()
+            
+            # 파일 크기 체크 (10MB)
+            if len(image_content) > 10 * 1024 * 1024:
                 results.append({
                     "filename": file.filename,
                     "error": "파일 크기가 10MB를 초과합니다."
                 })
                 continue
-
-            image_content = await file.read()
             
             # 파일이 비어있는지 확인
             if not image_content:
@@ -86,42 +88,54 @@ async def process_images(files: List[UploadFile] = File(...)):
                 })
                 continue
 
+            print(f"File size: {len(image_content)} bytes")  # 디버깅용 로그
+            
             # 이미지 파일 유효성 검사
             try:
                 image = Image.open(io.BytesIO(image_content))
-                image.verify()  # 이미지 유효성 검증
-                image = Image.open(io.BytesIO(image_content))  # verify() 후에는 다시 열어야 함
+                # 이미지 포맷 확인
+                print(f"Image format: {image.format}")  # 디버깅용 로그
+                if image.format not in ['JPEG', 'PNG', 'BMP', 'GIF', 'TIFF']:
+                    results.append({
+                        "filename": file.filename,
+                        "error": f"지원하지 않는 이미지 형식입니다: {image.format}"
+                    })
+                    continue
+                
+                # OCR 처리를 위해 이미지를 RGB로 변환
+                if image.mode not in ('L', 'RGB'):
+                    image = image.convert('RGB')
+                
+                # Tesseract OCR로 텍스트 추출
+                extracted_text = pytesseract.image_to_string(image, lang='kor+eng')
+                print(f"Extracted text length: {len(extracted_text)}")  # 디버깅용 로그
+                
+                # OpenAI API를 사용하여 텍스트 요약
+                summary_response = openai_client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "한국어 텍스트를 간단히 요약해주세요."},
+                        {"role": "user", "content": extracted_text}
+                    ]
+                )
+                summary = summary_response.choices[0].message.content
+                
+                # 이미지를 바이트 배열로 변환
+                img_byte_arr = io.BytesIO()
+                image.save(img_byte_arr, format=image.format or 'JPEG')
+                img_byte_arr = img_byte_arr.getvalue()
+                
+                results.append({
+                    "filename": file.filename,
+                    "text": extracted_text,
+                    "summary": summary,
+                    "image": img_byte_arr
+                })
             except Exception as e:
                 results.append({
                     "filename": file.filename,
-                    "error": f"유효하지 않은 이미지 파일입니다: {str(e)}"
+                    "error": str(e)
                 })
-                continue
-            
-            # Tesseract OCR로 텍스트 추출
-            extracted_text = pytesseract.image_to_string(image, lang='kor+eng')
-            
-            # OpenAI API를 사용하여 텍스트 요약
-            summary_response = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "한국어 텍스트를 간단히 요약해주세요."},
-                    {"role": "user", "content": extracted_text}
-                ]
-            )
-            summary = summary_response.choices[0].message.content
-            
-            # 이미지를 바이트 배열로 변환
-            img_byte_arr = io.BytesIO()
-            image.save(img_byte_arr, format=image.format or 'JPEG')
-            img_byte_arr = img_byte_arr.getvalue()
-            
-            results.append({
-                "filename": file.filename,
-                "text": extracted_text,
-                "summary": summary,
-                "image": img_byte_arr
-            })
         except Exception as e:
             results.append({
                 "filename": file.filename,
