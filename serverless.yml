@@ -10,9 +10,6 @@ provider:
     S3_BUCKET: "ocr-temp-storage"
   timeout: 30
   memorySize: 2048
-  deploymentBucket:
-    name: ocr-backend-deployment
-    serverSideEncryption: AES256
   iam:
     role:
       statements:
@@ -54,7 +51,7 @@ functions:
 
 resources:
   Resources:
-    DeploymentBucket:
+    ServerlessDeploymentBucket:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: ocr-backend-deployment
@@ -92,7 +89,6 @@ resources:
               Status: Enabled
               ExpirationInDays: 1
     
-    # S3 버킷 정책 수정
     OcrStorageBucketPolicy:
       Type: AWS::S3::BucketPolicy
       Properties:
