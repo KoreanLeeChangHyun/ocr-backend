@@ -7,7 +7,6 @@ provider:
   stage: prod
   environment:
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
-    ALLOWED_ORIGINS: "https://main.d32popiutux8lz.amplifyapp.com,http://localhost:3000"
   timeout: 30
   memorySize: 1024
   iam:
@@ -29,7 +28,7 @@ functions:
           path: /api/{proxy+}
           method: any
           cors:
-            origin: "https://main.d32popiutux8lz.amplifyapp.com,http://localhost:3000"
+            origin: "*"
             headers:
               - Content-Type
               - Authorization
@@ -38,6 +37,7 @@ functions:
               - X-Amz-Security-Token
               - X-Amz-User-Agent
             allowCredentials: true
+            maxAge: 86400
 
 package:
   patterns:
