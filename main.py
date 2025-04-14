@@ -64,16 +64,25 @@ openai_client = OpenAI(
 # 출력: 각 이미지의 텍스트 추출 결과, 요약, 원본 이미지
 @app.post("/api/ocr")
 async def process_images(files: List[UploadFile] = File(...)):
+    print("OCR 처리 시작")  # 디버깅 로그
     results = []
+    
+    if not files:
+        print("업로드된 파일이 없음")  # 디버깅 로그
+        return {"error": "업로드된 파일이 없습니다."}
+    
+    print(f"업로드된 파일 수: {len(files)}")  # 디버깅 로그
     
     for file in files:
         try:
-            print(f"Processing file: {file.filename}")  # 디버깅용 로그
+            print(f"파일 처리 시작: {file.filename}")  # 디버깅 로그
             
             image_content = await file.read()
+            print(f"파일 크기: {len(image_content)} bytes")  # 디버깅 로그
             
             # 파일 크기 체크 (10MB)
             if len(image_content) > 10 * 1024 * 1024:
+                print("파일 크기 초과")  # 디버깅 로그
                 results.append({
                     "filename": file.filename,
                     "error": "파일 크기가 10MB를 초과합니다."
@@ -82,34 +91,31 @@ async def process_images(files: List[UploadFile] = File(...)):
             
             # 파일이 비어있는지 확인
             if not image_content:
+                print("빈 파일")  # 디버깅 로그
                 results.append({
                     "filename": file.filename,
                     "error": "빈 파일입니다."
                 })
                 continue
 
-            print(f"File size: {len(image_content)} bytes")  # 디버깅용 로그
-            
             # 이미지 파일 유효성 검사
             try:
+                print("이미지 열기 시도")  # 디버깅 로그
                 image = Image.open(io.BytesIO(image_content))
-                # 이미지 포맷 확인
-                print(f"Image format: {image.format}")  # 디버깅용 로그
-                if image.format not in ['JPEG', 'PNG', 'BMP', 'GIF', 'TIFF']:
-                    results.append({
-                        "filename": file.filename,
-                        "error": f"지원하지 않는 이미지 형식입니다: {image.format}"
-                    })
-                    continue
+                print(f"이미지 포맷: {image.format}, 크기: {image.size}, 모드: {image.mode}")  # 디버깅 로그
                 
                 # OCR 처리를 위해 이미지를 RGB로 변환
                 if image.mode not in ('L', 'RGB'):
+                    print(f"이미지 모드 변환: {image.mode} -> RGB")  # 디버깅 로그
                     image = image.convert('RGB')
                 
+                print("Tesseract OCR 시작")  # 디버깅 로그
                 # Tesseract OCR로 텍스트 추출
                 extracted_text = pytesseract.image_to_string(image, lang='kor+eng')
-                print(f"Extracted text length: {len(extracted_text)}")  # 디버깅용 로그
+                print(f"추출된 텍스트 길이: {len(extracted_text)}")  # 디버깅 로그
+                print(f"추출된 텍스트 미리보기: {extracted_text[:100]}")  # 디버깅 로그
                 
+                print("OpenAI API 호출 시작")  # 디버깅 로그
                 # OpenAI API를 사용하여 텍스트 요약
                 summary_response = openai_client.chat.completions.create(
                     model="gpt-3.5-turbo",
@@ -119,11 +125,14 @@ async def process_images(files: List[UploadFile] = File(...)):
                     ]
                 )
                 summary = summary_response.choices[0].message.content
+                print(f"요약 텍스트 길이: {len(summary)}")  # 디버깅 로그
                 
                 # 이미지를 바이트 배열로 변환
+                print("이미지 인코딩 시작")  # 디버깅 로그
                 img_byte_arr = io.BytesIO()
                 image.save(img_byte_arr, format=image.format or 'JPEG')
                 img_byte_arr = img_byte_arr.getvalue()
+                print("이미지 인코딩 완료")  # 디버깅 로그
                 
                 results.append({
                     "filename": file.filename,
@@ -131,17 +140,22 @@ async def process_images(files: List[UploadFile] = File(...)):
                     "summary": summary,
                     "image": img_byte_arr
                 })
+                print(f"파일 처리 완료: {file.filename}")  # 디버깅 로그
+                
             except Exception as e:
+                print(f"이미지 처리 중 오류 발생: {str(e)}")  # 디버깅 로그
                 results.append({
                     "filename": file.filename,
                     "error": str(e)
                 })
         except Exception as e:
+            print(f"파일 처리 중 오류 발생: {str(e)}")  # 디버깅 로그
             results.append({
                 "filename": file.filename,
                 "error": str(e)
             })
     
+    print("모든 파일 처리 완료")  # 디버깅 로그
     return {"results": results}
 
 # PDF 생성 API 엔드포인트
