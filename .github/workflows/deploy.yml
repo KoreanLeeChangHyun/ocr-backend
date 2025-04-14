@@ -19,13 +19,11 @@ jobs:
       with:
         python-version: '3.9'
 
-    - name: Install Serverless Framework
-      run: npm install -g serverless@latest
-
-    - name: Install Serverless Plugins
+    - name: Install CDK
       run: |
-        npm init -y
-        npm install --save-dev serverless-python-requirements
+        python -m pip install --upgrade pip
+        pip install aws-cdk-lib constructs
+        npm install -g aws-cdk
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
@@ -34,7 +32,9 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ap-northeast-2
 
-    - name: Deploy to AWS Lambda
-      run: serverless deploy --verbose
+    - name: Deploy CDK
+      run: |
+        cdk bootstrap
+        cdk deploy --require-approval never
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} 
