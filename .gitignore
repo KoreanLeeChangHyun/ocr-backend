@@ -41,4 +41,26 @@ ENV/
 
 # Local development
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Serverless
+.serverless/
+.serverless-python-requirements/
+
+# Fonts (except required)
+fonts/*
+!fonts/NanumGothic.ttf
+
+# Test files
+test_*.py
+*.test.py
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Distribution
+dist/
+build/
+*.egg-info/ 

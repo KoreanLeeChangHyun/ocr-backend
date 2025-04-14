@@ -8,8 +8,14 @@ provider:
   environment:
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
     S3_BUCKET: "ocr-temp-storage"
-  timeout: 30
-  memorySize: 2048
+  timeout: 60
+  memorySize: 3008
+  vpc:
+    securityGroupIds:
+      - ${env:VPC_SECURITY_GROUP}
+    subnetIds:
+      - ${env:VPC_SUBNET_1}
+      - ${env:VPC_SUBNET_2}
   iam:
     role:
       statements:
@@ -29,25 +35,42 @@ provider:
           Resource: 
             - "arn:aws:s3:::${self:provider.environment.S3_BUCKET}"
             - "arn:aws:s3:::${self:provider.environment.S3_BUCKET}/*"
+        - Effect: Allow
+          Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+          Resource: "*"
 
 functions:
   api:
     handler: main.handler
+    layers:
+      - ${self:custom.tesseractLayer}
     events:
       - http:
           path: /api/{proxy+}
           method: any
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
-              - Authorization
-              - X-Amz-Date
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-            allowCredentials: true
-            maxAge: 86400
+          cors: true
+    alarms:
+      - name: highErrorRate
+        description: 'High error rate'
+        namespace: 'AWS/Lambda'
+        metric: Errors
+        threshold: 1
+        period: 300
+        evaluationPeriods: 1
+        comparisonOperator: GreaterThanThreshold
+        statistic: Sum
+      - name: highDuration
+        description: 'High duration'
+        namespace: 'AWS/Lambda'
+        metric: Duration
+        threshold: 50000
+        period: 300
+        evaluationPeriods: 1
+        comparisonOperator: GreaterThanThreshold
+        statistic: Average
 
 resources:
   Resources:
@@ -126,10 +149,19 @@ package:
 
 plugins:
   - serverless-python-requirements
+  - serverless-plugin-lambda-layers
 
 custom:
   pythonRequirements:
     dockerizePip: true
     slim: true
     useDownloadCache: true
-    useStaticCache: true 
+    useStaticCache: true
+  tesseractLayer:
+    name: tesseract-ocr
+    description: Tesseract OCR layer
+    compatibleRuntimes:
+      - python3.9
+    package:
+      - tesseract
+      - tesseract-langpack-kor 

@@ -23,6 +23,8 @@ import uuid
 from datetime import datetime, timedelta
 import json
 import traceback
+from botocore.exceptions import ClientError
+import gc
 
 # 환경 변수 로드 (.env 파일에서 API 키 등을 가져옴) TEST
 load_dotenv()
@@ -47,16 +49,10 @@ app.add_middleware(
 @app.middleware("http")
 async def add_cors_headers(request, call_next):
     response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "https://main.d32popiutux8lz.amplifyapp.com"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Amz-Date, X-Api-Key, X-Amz-Security-Token, X-Amz-User-Agent"
-    response.headers["Access-Control-Expose-Headers"] = "*"
-    response.headers["Access-Control-Max-Age"] = "86400"
     return response
 
 # Tesseract OCR 엔진 경로 설정 (AWS Lambda 환경)
-pytesseract.pytesseract.tesseract_cmd = '/opt/bin/tesseract'
+pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
 # OpenAI API 클라이언트 초기화
 openai_client = OpenAI(
@@ -138,9 +134,62 @@ async def upload_to_s3(file_bytes: bytes, file_name: str) -> str:
         })
         raise e
 
+# 이미지 전처리 함수
+def preprocess_image(image: Image.Image) -> Image.Image:
+    try:
+        # 이미지 크기 최적화 (A4 크기 기준, 300dpi)
+        max_size = (2480, 3508)
+        if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
+            original_size = image.size
+            image.thumbnail(max_size, Image.Resampling.LANCZOS)
+            log_info("이미지 크기 조정", {
+                "original_size": original_size,
+                "new_size": image.size,
+                "max_size": max_size
+            })
+        
+        # 이미지를 RGB로 변환
+        if image.mode not in ('L', 'RGB'):
+            original_mode = image.mode
+            image = image.convert('RGB')
+            log_info("이미지 모드 변환", {
+                "original_mode": original_mode,
+                "new_mode": image.mode
+            })
+        
+        return image
+    except Exception as e:
+        log_error("이미지 전처리 중 오류 발생", e)
+        raise e
+
+# OCR 수행 함수
+def perform_ocr(image: Image.Image) -> str:
+    try:
+        log_info("Tesseract OCR 시작")
+        extracted_text = pytesseract.image_to_string(image, lang='kor+eng')
+        log_info("OCR 완료", {"text_length": len(extracted_text)})
+        
+        # OpenAI로 요약 생성
+        log_info("OpenAI API 호출 시작")
+        summary_response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "한국어 텍스트를 간단히 요약해주세요."},
+                {"role": "user", "content": extracted_text}
+            ]
+        )
+        summary = summary_response.choices[0].message.content
+        log_info("요약 완료", {"summary_length": len(summary)})
+        
+        return {
+            "text": extracted_text,
+            "summary": summary
+        }
+    except Exception as e:
+        log_error("OCR 처리 실패", e)
+        raise e
+
 # 이미지 OCR 처리 및 요약 API 엔드포인트
-# 입력: 이미지 파일 목록
-# 출력: 각 이미지의 텍스트 추출 결과, 요약, 원본 이미지
 @app.post("/api/ocr")
 async def process_images(files: List[UploadFile] = File(...)):
     log_info("OCR 처리 시작")
@@ -183,12 +232,24 @@ async def process_images(files: List[UploadFile] = File(...)):
             
             # OCR 처리
             log_info(f"OCR 처리 시작", filename=file.filename)
-            ocr_text = perform_ocr(processed_image)
+            ocr_result = perform_ocr(processed_image)
+            
+            # 이미지를 S3에 업로드
+            log_info("S3 업로드 준비", filename=file.filename)
+            img_byte_arr = io.BytesIO()
+            processed_image.save(img_byte_arr, format='JPEG', quality=85)
+            img_byte_arr = img_byte_arr.getvalue()
+            
+            # S3에 업로드하고 URL 받기
+            image_url = await upload_to_s3(img_byte_arr, file.filename)
+            log_info("S3 업로드 완료", filename=file.filename, url=image_url)
             
             # 결과 저장
             results.append({
                 "filename": file.filename,
-                "text": ocr_text,
+                "text": ocr_result["text"],
+                "summary": ocr_result["summary"],
+                "image": image_url,
                 "size": len(image_content),
                 "content_type": file.content_type
             })
@@ -284,4 +345,7 @@ async def health_check():
             "s3_status": "error",
             "error": str(e),
             "bucket": S3_BUCKET
-        } 
+        }
+
+def handler(event, context):
+    return handler(event, context) 
