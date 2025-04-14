@@ -1,14 +1,16 @@
-# 필요한 라이브러리 임포트
-import os  # 운영체제 관련 기능 사용
-from fastapi import FastAPI, UploadFile, File  # FastAPI 웹 프레임워크 및 파일 업로드 관련 기능
-from fastapi.middleware.cors import CORSMiddleware  # CORS 미들웨어 (크로스 오리진 리소스 공유)
-from openai import OpenAI  # OpenAI API 클라이언트
-from dotenv import load_dotenv  # 환경 변수 로드
-from PIL import Image  # 이미지 처리 라이브러리
-import io  # 입출력 스트림 처리
-from typing import List  # 타입 힌팅을 위한 List 타입
-from mangum import Mangum  # AWS Lambda에서 FastAPI 실행을 위한 어댑터
-import pytesseract  # OCR (광학 문자 인식) 라이브러리
+# OCR 백엔드 서버의 핵심 기능을 구현한 메인 파일
+# FastAPI를 사용하여 RESTful API를 제공하며, AWS Lambda에서 실행됩니다.
+
+import os
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI
+from dotenv import load_dotenv
+from PIL import Image
+import io
+from typing import List
+from mangum import Mangum
+import pytesseract
 from fastapi.responses import StreamingResponse
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
@@ -17,15 +19,15 @@ from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
 import base64
 
-# .env 파일에서 환경 변수 로드  aa
+# 환경 변수 로드 (.env 파일에서 API 키 등을 가져옴)
 load_dotenv()
 
-# FastAPI 애플리케이션 인스턴스 생성
+# FastAPI 애플리케이션 초기화
 app = FastAPI()
-# AWS Lambda에서 실행하기 위한 핸들러 생성
+# AWS Lambda에서 FastAPI를 실행하기 위한 핸들러
 handler = Mangum(app)
 
-# CORS (Cross-Origin Resource Sharing) 미들웨어 설정
+# CORS 설정: 프론트엔드 도메인에서의 접근을 허용
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://main.d32popiutux8lz.amplifyapp.com", "http://localhost:3000"],
@@ -34,7 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Gateway와 통합하기 위한 설정
+# API Gateway와 통합하기 위한 CORS 헤더 설정
 @app.middleware("http")
 async def add_cors_headers(request, call_next):
     response = await call_next(request)
@@ -44,14 +46,15 @@ async def add_cors_headers(request, call_next):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return response
 
-# Tesseract OCR 엔진 경로 설정
-# AWS Lambda 환경에서의 Tesseract 실행 파일 경로
+# Tesseract OCR 엔진 경로 설정 (AWS Lambda 환경)
 pytesseract.pytesseract.tesseract_cmd = '/opt/bin/tesseract'
 
 # OpenAI API 클라이언트 초기화
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# 이미지 OCR 처리 및 요약을 위한 엔드포인트
+# 이미지 OCR 처리 및 요약 API 엔드포인트
+# 입력: 이미지 파일 목록
+# 출력: 각 이미지의 텍스트 추출 결과, 요약, 원본 이미지
 @app.post("/api/ocr")
 async def process_images(files: List[UploadFile] = File(...)):
     results = []
@@ -61,8 +64,10 @@ async def process_images(files: List[UploadFile] = File(...)):
         image = Image.open(io.BytesIO(image_content))
         
         try:
+            # Tesseract OCR로 텍스트 추출
             extracted_text = pytesseract.image_to_string(image, lang='kor+eng')
             
+            # OpenAI API를 사용하여 텍스트 요약
             summary_response = openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
@@ -72,6 +77,7 @@ async def process_images(files: List[UploadFile] = File(...)):
             )
             summary = summary_response.choices[0].message.content
             
+            # 이미지를 바이트 배열로 변환
             img_byte_arr = io.BytesIO()
             image.save(img_byte_arr, format=image.format or 'JPEG')
             img_byte_arr = img_byte_arr.getvalue()
@@ -90,6 +96,9 @@ async def process_images(files: List[UploadFile] = File(...)):
     
     return {"results": results}
 
+# PDF 생성 API 엔드포인트
+# 입력: OCR 처리 결과
+# 출력: PDF 파일 (다운로드)
 @app.post("/api/generate-pdf")
 async def generate_pdf(data: dict):
     buffer = BytesIO()
