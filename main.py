@@ -54,7 +54,10 @@ async def add_cors_headers(request, call_next):
 pytesseract.pytesseract.tesseract_cmd = '/opt/bin/tesseract'
 
 # OpenAI API 클라이언트 초기화
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    http_client=None  # proxies 오류를 방지하기 위해 http_client를 None으로 설정
+)
 
 # 이미지 OCR 처리 및 요약 API 엔드포인트
 # 입력: 이미지 파일 목록
