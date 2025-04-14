@@ -1,6 +1,6 @@
 service: ocr-backend
 
-frameworkVersion: '3'
+frameworkVersion: '3.33.0'
 
 provider:
   name: aws
