@@ -7,4 +7,5 @@ mangum==0.17.0
 Pillow==10.1.0
 python-jose==3.3.0
 pytesseract==0.3.10
-reportlab==4.0.4 
+reportlab==4.0.4
+reportlab-korean-fonts==0.1.0 

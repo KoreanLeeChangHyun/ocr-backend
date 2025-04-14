@@ -12,6 +12,8 @@ import pytesseract  # OCR (광학 문자 인식) 라이브러리
 from fastapi.responses import StreamingResponse
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
 import base64
 
@@ -93,6 +95,10 @@ async def generate_pdf(data: dict):
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     
+    # 한글 폰트 등록
+    pdfmetrics.registerFont(TTFont('NanumGothic', '/opt/python/NanumGothic.ttf'))
+    p.setFont('NanumGothic', 12)
+    
     for result in data["results"]:
         # 이미지 추가
         try:
@@ -117,6 +123,7 @@ async def generate_pdf(data: dict):
         for line in text.split('\n'):
             if y < 100:  # 페이지 끝에 도달하면 새 페이지 생성
                 p.showPage()
+                p.setFont('NanumGothic', 12)
                 y = 700
             p.drawString(100, y, line)
             y -= 20
