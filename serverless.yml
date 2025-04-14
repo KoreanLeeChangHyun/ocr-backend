@@ -54,7 +54,7 @@ package:
     - '!*.md'
     - '!requirements.txt'
     - '!serverless.yml'
-    - 'opt/python/NanumGothic.ttf'
+    - 'fonts/NanumGothic.ttf'
 
 plugins:
   - serverless-python-requirements
@@ -64,6 +64,4 @@ custom:
     dockerizePip: true
     slim: true
     useDownloadCache: true
-    useStaticCache: true
-    include:
-      - NanumGothic.ttf 
+    useStaticCache: true 
