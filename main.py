@@ -8,7 +8,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from PIL import Image
 import io
-from typing import List
+from typing import List, Dict, Any
 from mangum import Mangum
 import pytesseract
 from fastapi.responses import StreamingResponse
@@ -154,137 +154,55 @@ async def process_images(files: List[UploadFile] = File(...)):
     
     for file in files:
         try:
-            log_info(f"파일 처리", {
-                "filename": file.filename,
-                "content_type": file.content_type
-            })
+            log_info(f"파일 처리", filename=file.filename, content_type=file.content_type)
             
-            # 파일 확장자 체크
-            allowed_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff'}
-            file_ext = os.path.splitext(file.filename)[1].lower()
-            if file_ext not in allowed_extensions:
-                log_error(f"지원하지 않는 파일 형식", extra={
-                    "filename": file.filename,
-                    "extension": file_ext
-                })
-                results.append({
-                    "filename": file.filename,
-                    "error": f"지원하지 않는 파일 형식입니다: {file_ext}"
-                })
-                continue
+            # 파일 크기 제한 (10MB)
+            if file.size > 10 * 1024 * 1024:
+                raise ValueError("파일 크기가 10MB를 초과합니다")
             
-            # 파일 읽기
+            # 파일 내용 읽기
+            image_content = file.file.read()
+            log_info(f"파일 읽기 완료", filename=file.filename, size=len(image_content))
+            
+            # 이미지 데이터 검증
+            if not image_content:
+                raise ValueError("파일 내용이 비어있습니다")
+            
+            # 이미지 형식 검증
             try:
-                image_content = await file.read()
-                log_info("파일 읽기 완료", {
-                    "filename": file.filename,
-                    "size": len(image_content)
-                })
-                
-                if len(image_content) == 0:
-                    log_error("빈 파일", extra={"filename": file.filename})
-                    results.append({
-                        "filename": file.filename,
-                        "error": "빈 파일입니다."
-                    })
-                    continue
-                
-                # 이미지 파일 유효성 검사
-                try:
-                    log_info("이미지 처리 시작", {"filename": file.filename})
-                    image = Image.open(io.BytesIO(image_content))
-                    
-                    # 이미지 기본 정보 출력
-                    log_info("이미지 정보", {
-                        "filename": file.filename,
-                        "format": image.format,
-                        "size": image.size,
-                        "mode": image.mode
-                    })
-                    
-                    # 이미지 크기 최적화
-                    max_size = (800, 800)
-                    if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
-                        original_size = image.size
-                        image.thumbnail(max_size, Image.Resampling.LANCZOS)
-                        log_info("이미지 크기 조정", {
-                            "filename": file.filename,
-                            "original_size": original_size,
-                            "new_size": image.size
-                        })
-                    
-                    # OCR 처리를 위해 이미지를 RGB로 변환
-                    if image.mode not in ('L', 'RGB'):
-                        original_mode = image.mode
-                        image = image.convert('RGB')
-                        log_info("이미지 모드 변환", {
-                            "filename": file.filename,
-                            "original_mode": original_mode,
-                            "new_mode": image.mode
-                        })
-                    
-                    log_info("Tesseract OCR 시작", {"filename": file.filename})
-                    extracted_text = pytesseract.image_to_string(image, lang='kor+eng')
-                    log_info("OCR 완료", {
-                        "filename": file.filename,
-                        "text_length": len(extracted_text)
-                    })
-                    
-                    log_info("OpenAI API 호출 시작", {"filename": file.filename})
-                    summary_response = openai_client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=[
-                            {"role": "system", "content": "한국어 텍스트를 간단히 요약해주세요."},
-                            {"role": "user", "content": extracted_text}
-                        ]
-                    )
-                    summary = summary_response.choices[0].message.content
-                    log_info("요약 완료", {
-                        "filename": file.filename,
-                        "summary_length": len(summary)
-                    })
-                    
-                    # 이미지를 S3에 업로드
-                    log_info("S3 업로드 준비", {"filename": file.filename})
-                    img_byte_arr = io.BytesIO()
-                    image.save(img_byte_arr, format='JPEG', quality=85)
-                    img_byte_arr = img_byte_arr.getvalue()
-                    
-                    # S3에 업로드하고 URL 받기
-                    image_url = await upload_to_s3(img_byte_arr, file.filename)
-                    log_info("S3 업로드 완료", {
-                        "filename": file.filename,
-                        "url": image_url
-                    })
-                    
-                    results.append({
-                        "filename": file.filename,
-                        "text": extracted_text,
-                        "summary": summary,
-                        "image": image_url
-                    })
-                    log_info("파일 처리 완료", {"filename": file.filename})
-                    
-                except Exception as e:
-                    log_error("이미지 처리 중 오류", e, {"filename": file.filename})
-                    results.append({
-                        "filename": file.filename,
-                        "error": str(e)
-                    })
+                image = Image.open(io.BytesIO(image_content))
+                image.verify()  # 이미지 데이터 검증
+                image = Image.open(io.BytesIO(image_content))  # 검증 후 다시 열기
             except Exception as e:
-                log_error("파일 읽기 중 오류", e, {"filename": file.filename})
-                results.append({
-                    "filename": file.filename,
-                    "error": str(e)
-                })
-        except Exception as e:
-            log_error("파일 처리 중 오류", e, {"filename": file.filename})
+                log_error(f"이미지 검증 실패", error_type=type(e).__name__, error_message=str(e), filename=file.filename)
+                raise ValueError(f"유효하지 않은 이미지 파일입니다: {str(e)}")
+            
+            # 이미지 처리
+            log_info(f"이미지 처리 시작", filename=file.filename)
+            processed_image = preprocess_image(image)
+            
+            # OCR 처리
+            log_info(f"OCR 처리 시작", filename=file.filename)
+            ocr_text = perform_ocr(processed_image)
+            
+            # 결과 저장
             results.append({
                 "filename": file.filename,
-                "error": str(e)
+                "text": ocr_text,
+                "size": len(image_content),
+                "content_type": file.content_type
+            })
+            log_info(f"파일 처리 완료", filename=file.filename)
+            
+        except Exception as e:
+            log_error(f"파일 처리 중 오류", error_type=type(e).__name__, error_message=str(e), filename=file.filename)
+            results.append({
+                "filename": file.filename,
+                "error": str(e),
+                "status": "error"
             })
     
-    log_info("모든 파일 처리 완료", {"total_files": len(files), "success_count": len([r for r in results if "error" not in r])})
+    log_info(f"모든 파일 처리 완료", total_files=len(files), success_count=len([r for r in results if "error" not in r]))
     return {"results": results}
 
 # PDF 생성 API 엔드포인트
