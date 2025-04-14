@@ -7,9 +7,9 @@ provider:
   stage: prod
   environment:
     OPENAI_API_KEY: ${env:OPENAI_API_KEY}
-    S3_BUCKET: ${self:service}-${self:provider.stage}-temp
+    S3_BUCKET: "ocr-temp-storage"
   timeout: 30
-  memorySize: 1024
+  memorySize: 2048
   iam:
     role:
       statements:
@@ -25,7 +25,9 @@ provider:
             - s3:PutObject
             - s3:GetObject
             - s3:DeleteObject
+            - s3:ListBucket
           Resource: 
+            - "arn:aws:s3:::${self:provider.environment.S3_BUCKET}"
             - "arn:aws:s3:::${self:provider.environment.S3_BUCKET}/*"
 
 functions:
@@ -49,14 +51,20 @@ functions:
 
 resources:
   Resources:
-    TempBucket:
+    OcrStorageBucket:
       Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
       Properties:
         BucketName: ${self:provider.environment.S3_BUCKET}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
         CorsConfiguration:
           CorsRules:
             - AllowedHeaders: ['*']
-              AllowedMethods: [GET, PUT]
+              AllowedMethods: [GET, PUT, POST, DELETE, HEAD]
               AllowedOrigins: ['*']
               MaxAge: 3000
         LifecycleConfiguration:
@@ -64,6 +72,27 @@ resources:
             - Id: DeleteOldFiles
               Status: Enabled
               ExpirationInDays: 1
+    
+    # S3 버킷 정책 추가
+    OcrStorageBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref OcrStorageBucket
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Sid: AllowLambdaAccess
+              Effect: Allow
+              Principal:
+                AWS: !GetAtt LambdaExecutionRole.Arn
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:DeleteObject
+                - s3:ListBucket
+              Resource:
+                - !Sub ${OcrStorageBucket.Arn}/*
+                - !Sub ${OcrStorageBucket.Arn}
 
 package:
   patterns:
