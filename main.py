@@ -13,7 +13,7 @@ import pytesseract  # OCR (광학 문자 인식) 라이브러리
 # .env 파일에서 환경 변수 로드 
 load_dotenv()
 
-# FastAPI 애플리케이션 인스턴스 생성
+# FastAPI 애플리케이션 인스턴스 생성 TEST
 app = FastAPI()
 # AWS Lambda에서 실행하기 위한 핸들러 생성
 handler = Mangum(app)
