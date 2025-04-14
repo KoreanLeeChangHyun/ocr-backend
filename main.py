@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 import json
 import traceback
 
-# 환경 변수 로드 (.env 파일에서 API 키 등을 가져옴)
+# 환경 변수 로드 (.env 파일에서 API 키 등을 가져옴) TEST
 load_dotenv()
 
 # FastAPI 애플리케이션 초기화
