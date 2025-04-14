@@ -65,18 +65,18 @@ openai_client = OpenAI(
 )
 
 # 로깅 헬퍼 함수
-def log_info(message: str, extra: dict = None):
+def log_info(message: str, **kwargs):
     timestamp = datetime.now().isoformat()
     log_data = {
         "timestamp": timestamp,
         "level": "INFO",
         "message": message
     }
-    if extra:
-        log_data.update(extra)
+    if kwargs:
+        log_data.update(kwargs)
     print(json.dumps(log_data, ensure_ascii=False))
 
-def log_error(message: str, error: Exception = None, extra: dict = None):
+def log_error(message: str, error: Exception = None, **kwargs):
     timestamp = datetime.now().isoformat()
     log_data = {
         "timestamp": timestamp,
@@ -87,8 +87,8 @@ def log_error(message: str, error: Exception = None, extra: dict = None):
         log_data["error_type"] = type(error).__name__
         log_data["error_message"] = str(error)
         log_data["stacktrace"] = traceback.format_exc()
-    if extra:
-        log_data.update(extra)
+    if kwargs:
+        log_data.update(kwargs)
     print(json.dumps(log_data, ensure_ascii=False))
 
 # S3 클라이언트 초기화
