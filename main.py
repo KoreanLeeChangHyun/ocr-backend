@@ -9,6 +9,11 @@ import io  # 입출력 스트림 처리
 from typing import List  # 타입 힌팅을 위한 List 타입
 from mangum import Mangum  # AWS Lambda에서 FastAPI 실행을 위한 어댑터
 import pytesseract  # OCR (광학 문자 인식) 라이브러리
+from fastapi.responses import StreamingResponse
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from io import BytesIO
+import base64
 
 # .env 파일에서 환경 변수 로드 
 load_dotenv()
@@ -72,6 +77,50 @@ async def process_images(files: List[UploadFile] = File(...)):
             })
     
     return {"results": results}
+
+@app.post("/api/generate-pdf")
+async def generate_pdf(data: dict):
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    
+    for result in data["results"]:
+        # 이미지 추가
+        try:
+            img_data = base64.b64decode(result["image"])
+            img = Image.open(BytesIO(img_data))
+            img_width, img_height = img.size
+            aspect = img_height / float(img_width)
+            display_width = 400
+            display_height = display_width * aspect
+            
+            p.drawImage(BytesIO(img_data), 100, 600, width=display_width, height=display_height)
+        except Exception as e:
+            print(f"이미지 처리 중 오류 발생: {e}")
+        
+        # 텍스트 추가
+        p.drawString(100, 550, f"요약: {result['summary']}")
+        p.drawString(100, 500, "원문:")
+        
+        # 긴 텍스트를 여러 줄로 나누기
+        text = result["text"]
+        y = 480
+        for line in text.split('\n'):
+            if y < 100:  # 페이지 끝에 도달하면 새 페이지 생성
+                p.showPage()
+                y = 700
+            p.drawString(100, y, line)
+            y -= 20
+        
+        p.showPage()
+    
+    p.save()
+    buffer.seek(0)
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=ocr_results.pdf"}
+    )
 
 # 서버 상태 확인을 위한 헬스 체크 엔드포인트
 @app.get("/api/health")
