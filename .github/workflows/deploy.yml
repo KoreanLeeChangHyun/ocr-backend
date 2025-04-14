@@ -20,7 +20,7 @@ jobs:
         python-version: '3.9'
 
     - name: Install Serverless Framework
-      run: npm install -g serverless
+      run: npm install -g serverless@latest
 
     - name: Install Serverless Plugins
       run: |
