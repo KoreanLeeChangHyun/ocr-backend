@@ -73,7 +73,7 @@ resources:
               Status: Enabled
               ExpirationInDays: 1
     
-    # S3 버킷 정책 추가
+    # S3 버킷 정책 수정
     OcrStorageBucketPolicy:
       Type: AWS::S3::BucketPolicy
       Properties:
@@ -84,7 +84,7 @@ resources:
             - Sid: AllowLambdaAccess
               Effect: Allow
               Principal:
-                AWS: !GetAtt LambdaExecutionRole.Arn
+                Service: lambda.amazonaws.com
               Action:
                 - s3:PutObject
                 - s3:GetObject

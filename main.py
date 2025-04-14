@@ -21,6 +21,8 @@ import base64
 import boto3
 import uuid
 from datetime import datetime, timedelta
+import json
+import traceback
 
 # 환경 변수 로드 (.env 파일에서 API 키 등을 가져옴)
 load_dotenv()
@@ -62,24 +64,60 @@ openai_client = OpenAI(
     http_client=None  # proxies 오류를 방지하기 위해 http_client를 None으로 설정
 )
 
+# 로깅 헬퍼 함수
+def log_info(message: str, extra: dict = None):
+    timestamp = datetime.now().isoformat()
+    log_data = {
+        "timestamp": timestamp,
+        "level": "INFO",
+        "message": message
+    }
+    if extra:
+        log_data.update(extra)
+    print(json.dumps(log_data, ensure_ascii=False))
+
+def log_error(message: str, error: Exception = None, extra: dict = None):
+    timestamp = datetime.now().isoformat()
+    log_data = {
+        "timestamp": timestamp,
+        "level": "ERROR",
+        "message": message
+    }
+    if error:
+        log_data["error_type"] = type(error).__name__
+        log_data["error_message"] = str(error)
+        log_data["stacktrace"] = traceback.format_exc()
+    if extra:
+        log_data.update(extra)
+    print(json.dumps(log_data, ensure_ascii=False))
+
 # S3 클라이언트 초기화
+log_info("S3 클라이언트 초기화")
 s3_client = boto3.client('s3')
 S3_BUCKET = os.getenv('S3_BUCKET')
+log_info(f"S3 버킷 설정", {"bucket": S3_BUCKET})
 
 # S3에 파일 업로드 함수
 async def upload_to_s3(file_bytes: bytes, file_name: str) -> str:
-    # 고유한 파일 이름 생성
-    ext = os.path.splitext(file_name)[1]
-    unique_filename = f"{uuid.uuid4()}{ext}"
-    
     try:
+        # 고유한 파일 이름 생성
+        ext = os.path.splitext(file_name)[1]
+        unique_filename = f"{uuid.uuid4()}{ext}"
+        log_info(f"S3 업로드 시작", {
+            "original_filename": file_name,
+            "unique_filename": unique_filename,
+            "file_size": len(file_bytes),
+            "bucket": S3_BUCKET
+        })
+        
         # S3에 업로드
         s3_client.put_object(
             Bucket=S3_BUCKET,
             Key=unique_filename,
             Body=file_bytes,
-            ContentType=f"image/{ext[1:]}"  # .jpg -> image/jpg
+            ContentType=f"image/{ext[1:]}"
         )
+        log_info("S3 업로드 완료", {"filename": unique_filename})
         
         # 24시간 유효한 프리사인드 URL 생성
         url = s3_client.generate_presigned_url(
@@ -88,12 +126,16 @@ async def upload_to_s3(file_bytes: bytes, file_name: str) -> str:
                 'Bucket': S3_BUCKET,
                 'Key': unique_filename
             },
-            ExpiresIn=86400  # 24시간
+            ExpiresIn=86400
         )
+        log_info("프리사인드 URL 생성 완료", {"url_expiry": "24시간"})
         
         return url
     except Exception as e:
-        print(f"S3 업로드 중 오류 발생: {str(e)}")
+        log_error("S3 업로드 실패", e, {
+            "filename": file_name,
+            "bucket": S3_BUCKET
+        })
         raise e
 
 # 이미지 OCR 처리 및 요약 API 엔드포인트
@@ -101,25 +143,30 @@ async def upload_to_s3(file_bytes: bytes, file_name: str) -> str:
 # 출력: 각 이미지의 텍스트 추출 결과, 요약, 원본 이미지
 @app.post("/api/ocr")
 async def process_images(files: List[UploadFile] = File(...)):
-    print("OCR 처리 시작")
+    log_info("OCR 처리 시작")
     results = []
     
     if not files:
-        print("업로드된 파일이 없음")
+        log_info("업로드된 파일 없음")
         return {"error": "업로드된 파일이 없습니다."}
     
-    print(f"업로드된 파일 수: {len(files)}")
+    log_info(f"파일 처리 시작", {"file_count": len(files)})
     
     for file in files:
         try:
-            print(f"파일 처리 시작: {file.filename}")
-            print(f"파일 콘텐츠 타입: {file.content_type}")
+            log_info(f"파일 처리", {
+                "filename": file.filename,
+                "content_type": file.content_type
+            })
             
             # 파일 확장자 체크
             allowed_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff'}
             file_ext = os.path.splitext(file.filename)[1].lower()
             if file_ext not in allowed_extensions:
-                print(f"지원하지 않는 파일 형식: {file_ext}")
+                log_error(f"지원하지 않는 파일 형식", extra={
+                    "filename": file.filename,
+                    "extension": file_ext
+                })
                 results.append({
                     "filename": file.filename,
                     "error": f"지원하지 않는 파일 형식입니다: {file_ext}"
@@ -129,10 +176,13 @@ async def process_images(files: List[UploadFile] = File(...)):
             # 파일 읽기
             try:
                 image_content = await file.read()
-                print(f"파일 크기: {len(image_content)} bytes")
+                log_info("파일 읽기 완료", {
+                    "filename": file.filename,
+                    "size": len(image_content)
+                })
                 
                 if len(image_content) == 0:
-                    print("빈 파일")
+                    log_error("빈 파일", extra={"filename": file.filename})
                     results.append({
                         "filename": file.filename,
                         "error": "빈 파일입니다."
@@ -141,29 +191,46 @@ async def process_images(files: List[UploadFile] = File(...)):
                 
                 # 이미지 파일 유효성 검사
                 try:
-                    print("이미지 열기 시도")
+                    log_info("이미지 처리 시작", {"filename": file.filename})
                     image = Image.open(io.BytesIO(image_content))
                     
                     # 이미지 기본 정보 출력
-                    print(f"이미지 포맷: {image.format}, 크기: {image.size}, 모드: {image.mode}")
+                    log_info("이미지 정보", {
+                        "filename": file.filename,
+                        "format": image.format,
+                        "size": image.size,
+                        "mode": image.mode
+                    })
                     
-                    # 이미지 크기 최적화 (너무 큰 경우)
-                    max_size = (800, 800)  # 최대 크기 지정
+                    # 이미지 크기 최적화
+                    max_size = (800, 800)
                     if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
+                        original_size = image.size
                         image.thumbnail(max_size, Image.Resampling.LANCZOS)
-                        print(f"이미지 크기 조정됨: {image.size}")
+                        log_info("이미지 크기 조정", {
+                            "filename": file.filename,
+                            "original_size": original_size,
+                            "new_size": image.size
+                        })
                     
                     # OCR 처리를 위해 이미지를 RGB로 변환
                     if image.mode not in ('L', 'RGB'):
-                        print(f"이미지 모드 변환: {image.mode} -> RGB")
+                        original_mode = image.mode
                         image = image.convert('RGB')
+                        log_info("이미지 모드 변환", {
+                            "filename": file.filename,
+                            "original_mode": original_mode,
+                            "new_mode": image.mode
+                        })
                     
-                    print("Tesseract OCR 시작")
+                    log_info("Tesseract OCR 시작", {"filename": file.filename})
                     extracted_text = pytesseract.image_to_string(image, lang='kor+eng')
-                    print(f"추출된 텍스트 길이: {len(extracted_text)}")
-                    print(f"추출된 텍스트 미리보기: {extracted_text[:100]}")
+                    log_info("OCR 완료", {
+                        "filename": file.filename,
+                        "text_length": len(extracted_text)
+                    })
                     
-                    print("OpenAI API 호출 시작")
+                    log_info("OpenAI API 호출 시작", {"filename": file.filename})
                     summary_response = openai_client.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
@@ -172,46 +239,52 @@ async def process_images(files: List[UploadFile] = File(...)):
                         ]
                     )
                     summary = summary_response.choices[0].message.content
-                    print(f"요약 텍스트 길이: {len(summary)}")
+                    log_info("요약 완료", {
+                        "filename": file.filename,
+                        "summary_length": len(summary)
+                    })
                     
                     # 이미지를 S3에 업로드
-                    print("S3 업로드 시작")
+                    log_info("S3 업로드 준비", {"filename": file.filename})
                     img_byte_arr = io.BytesIO()
                     image.save(img_byte_arr, format='JPEG', quality=85)
                     img_byte_arr = img_byte_arr.getvalue()
                     
                     # S3에 업로드하고 URL 받기
                     image_url = await upload_to_s3(img_byte_arr, file.filename)
-                    print("S3 업로드 완료")
+                    log_info("S3 업로드 완료", {
+                        "filename": file.filename,
+                        "url": image_url
+                    })
                     
                     results.append({
                         "filename": file.filename,
                         "text": extracted_text,
                         "summary": summary,
-                        "image": image_url  # S3 URL
+                        "image": image_url
                     })
-                    print(f"파일 처리 완료: {file.filename}")
+                    log_info("파일 처리 완료", {"filename": file.filename})
                     
                 except Exception as e:
-                    print(f"이미지 처리 중 오류 발생: {str(e)}")
+                    log_error("이미지 처리 중 오류", e, {"filename": file.filename})
                     results.append({
                         "filename": file.filename,
                         "error": str(e)
                     })
             except Exception as e:
-                print(f"파일 읽기 중 오류 발생: {str(e)}")
+                log_error("파일 읽기 중 오류", e, {"filename": file.filename})
                 results.append({
                     "filename": file.filename,
                     "error": str(e)
                 })
         except Exception as e:
-            print(f"파일 처리 중 오류 발생: {str(e)}")
+            log_error("파일 처리 중 오류", e, {"filename": file.filename})
             results.append({
                 "filename": file.filename,
                 "error": str(e)
             })
     
-    print("모든 파일 처리 완료")
+    log_info("모든 파일 처리 완료", {"total_files": len(files), "success_count": len([r for r in results if "error" not in r])})
     return {"results": results}
 
 # PDF 생성 API 엔드포인트
@@ -275,40 +348,22 @@ async def generate_pdf(data: dict):
 @app.get("/api/health")
 async def health_check():
     try:
+        log_info("헬스 체크 시작", {"bucket": S3_BUCKET})
+        
         # S3 버킷 존재 여부 확인
         s3_client.head_bucket(Bucket=S3_BUCKET)
-        
-        # 테스트 파일 업로드
-        test_content = b"Hello, S3 Test!"
-        test_key = "test/health_check.txt"
-        
-        s3_client.put_object(
-            Bucket=S3_BUCKET,
-            Key=test_key,
-            Body=test_content
-        )
-        
-        # 테스트 파일 읽기
-        response = s3_client.get_object(
-            Bucket=S3_BUCKET,
-            Key=test_key
-        )
-        
-        # 테스트 파일 삭제
-        s3_client.delete_object(
-            Bucket=S3_BUCKET,
-            Key=test_key
-        )
+        log_info("S3 버킷 연결 확인 완료")
         
         return {
             "status": "healthy",
             "s3_status": "connected",
-            "bucket": S3_BUCKET,
-            "test_file_content": response['Body'].read().decode('utf-8')
+            "bucket": S3_BUCKET
         }
     except Exception as e:
+        log_error("헬스 체크 실패", e, {"bucket": S3_BUCKET})
         return {
             "status": "unhealthy",
             "s3_status": "error",
-            "error": str(e)
+            "error": str(e),
+            "bucket": S3_BUCKET
         } 
