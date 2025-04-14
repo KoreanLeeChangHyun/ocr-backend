@@ -274,4 +274,41 @@ async def generate_pdf(data: dict):
 # 서버 상태 확인을 위한 헬스 체크 엔드포인트
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy"} 
+    try:
+        # S3 버킷 존재 여부 확인
+        s3_client.head_bucket(Bucket=S3_BUCKET)
+        
+        # 테스트 파일 업로드
+        test_content = b"Hello, S3 Test!"
+        test_key = "test/health_check.txt"
+        
+        s3_client.put_object(
+            Bucket=S3_BUCKET,
+            Key=test_key,
+            Body=test_content
+        )
+        
+        # 테스트 파일 읽기
+        response = s3_client.get_object(
+            Bucket=S3_BUCKET,
+            Key=test_key
+        )
+        
+        # 테스트 파일 삭제
+        s3_client.delete_object(
+            Bucket=S3_BUCKET,
+            Key=test_key
+        )
+        
+        return {
+            "status": "healthy",
+            "s3_status": "connected",
+            "bucket": S3_BUCKET,
+            "test_file_content": response['Body'].read().decode('utf-8')
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "s3_status": "error",
+            "error": str(e)
+        } 
