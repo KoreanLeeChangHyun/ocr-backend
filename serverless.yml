@@ -1,5 +1,7 @@
 service: ocr-backend
 
+frameworkVersion: ^3.40.0
+
 provider:
   name: aws
   runtime: python3.9
@@ -145,6 +147,9 @@ custom:
     slim: true
     useDownloadCache: true
     useStaticCache: true
+    layer:
+      name: python-deps
+      description: Python dependencies
   tesseractLayer:
     name: tesseract-ocr
     description: Tesseract OCR layer
