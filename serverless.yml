@@ -10,6 +10,9 @@ provider:
     S3_BUCKET: "ocr-temp-storage"
   timeout: 30
   memorySize: 2048
+  deploymentBucket:
+    name: ocr-backend-deployment
+    serverSideEncryption: AES256
   iam:
     role:
       statements:
