@@ -28,16 +28,8 @@ functions:
       - http:
           path: /api/{proxy+}
           method: any
-          cors:
-            origin: "https://main.d32popiutux8lz.amplifyapp.com"
-            headers:
-              - Content-Type
-              - Authorization
-              - X-Amz-Date
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-            allowCredentials: true
+          cors: true
+          authorizer: none
 
 package:
   patterns:
